@@ -97,17 +97,6 @@ class TrpgKit(Star):
     def _resolve_card(self, event: AstrMessageEvent, name: str | None = None) -> CharacterCard | None:
         return self.characters.resolve(self._uid(event), name)
 
-    async def _try_dice_image(self, event: AstrMessageEvent, payload: dict[str, Any]) -> bool:
-        """Render dice card image. Returns True if image_result was yielded."""
-        try:
-            html = render_dice_html(payload)
-            url = await self.html_render("{{ html|safe }}", {"html": html})
-            yield event.image_result(url)
-            return True
-        except Exception as e:
-            logger.warning(f"dice image render failed: {e}")
-            return False
-
     # --- dice / check ---
 
     @filter.command("trpgroll")
