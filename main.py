@@ -411,7 +411,17 @@ class TrpgKit(Star):
         if not npc:
             yield event.plain_result(f"没有 NPC「{name}」")
             return
-        attrs_line = " ".join(f"{k}{npc.attrs.get(k,0)}" for k in ATTR_KEYS)
+        try:
+            from render.card import render_character_html
+
+            san = int(npc.derived.get("SAN", npc.attrs.get("POW", 0)))
+            html = render_character_html(npc, san_now=san)
+            url = await self.html_render("{{ html|safe }}", {"html": html})
+            yield event.image_result(url)
+            return
+        except Exception as e:
+            logger.warning(f"npc html_render failed: {e}")
+        attrs_line = " ".join(f"{k}={npc.attrs.get(k,0)}" for k in ATTR_KEYS)
         yield event.plain_result(
             f"NPC · {npc.name}\n{attrs_line}\n"
             f"HP={npc.derived.get('HP')} MP={npc.derived.get('MP')} SAN={npc.derived.get('SAN')}"
