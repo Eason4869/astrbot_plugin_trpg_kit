@@ -253,7 +253,7 @@ class TrpgKit(Star):
             from render.card import render_character_html
 
             html = render_character_html(card, san_now=san)
-            url = await self.html_render(html, {})
+            url = await self.html_render("{{ html|safe }}", {"html": html})
             yield event.image_result(url)
             return
         except Exception as e:
