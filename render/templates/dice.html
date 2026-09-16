@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+    background: #0f0f1a;
+    display: flex;
+    justify-content: center;
+    padding: 20px;
+  }
+  .card {
+    width: 520px;
+    background: linear-gradient(160deg, #1e1b2e 0%, #12101f 100%);
+    border: 2px solid #3d3560;
+    border-radius: 20px;
+    padding: 28px 24px 24px;
+    color: #f0eef8;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.06);
+  }
+  .title {
+    font-size: 15px;
+    letter-spacing: 2px;
+    color: #b8b0d4;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+  .subtitle {
+    font-size: 18px;
+    font-weight: 700;
+    color: #ffd56a;
+    margin-bottom: 18px;
+  }
+  .dice-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    justify-content: center;
+    margin: 12px 0 20px;
+    min-height: 72px;
+  }
+  /* —— 拟真骰子（CSS 立体感） —— */
+  .die-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+  .die {
+    width: 64px;
+    height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    font-weight: 800;
+    color: #1a1528;
+    position: relative;
+    border-radius: 12px;
+    background:
+      radial-gradient(circle at 30% 28%, rgba(255,255,255,0.55) 0%, transparent 42%),
+      linear-gradient(145deg, #f5e6a8 0%, #e8c547 40%, #c9a227 100%);
+    box-shadow:
+      0 6px 0 #8a7018,
+      0 10px 18px rgba(0,0,0,0.45),
+      inset 0 2px 3px rgba(255,255,255,0.5),
+      inset 0 -3px 6px rgba(0,0,0,0.18);
+    transform: rotate(-6deg);
+  }
+  .die:nth-child(even) { transform: rotate(5deg); }
+  .die.d10 {
+    border-radius: 50% 50% 50% 50% / 42% 42% 58% 58%;
+    width: 68px;
+    height: 68px;
+    background:
+      radial-gradient(circle at 32% 26%, rgba(255,255,255,0.5) 0%, transparent 40%),
+      linear-gradient(160deg, #7ec8ff 0%, #4a9edd 45%, #2a6f9e 100%);
+    box-shadow:
+      0 6px 0 #1a4a6e,
+      0 10px 18px rgba(0,0,0,0.45),
+      inset 0 2px 4px rgba(255,255,255,0.45),
+      inset 0 -4px 8px rgba(0,0,0,0.22);
+  }
+  .die.d20 {
+    clip-path: polygon(50% 0%, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%);
+    border-radius: 0;
+    width: 70px;
+    height: 70px;
+    background:
+      radial-gradient(circle at 35% 30%, rgba(255,255,255,0.45) 0%, transparent 45%),
+      linear-gradient(150deg, #e8a0ff 0%, #b45ad4 50%, #7a2ea0 100%);
+    box-shadow: 0 8px 16px rgba(0,0,0,0.5);
+  }
+  .die.d6 {
+    border-radius: 14px;
+    background:
+      radial-gradient(circle at 30% 28%, rgba(255,255,255,0.5) 0%, transparent 40%),
+      linear-gradient(145deg, #ffb4a2 0%, #e76f51 50%, #c44536 100%);
+    box-shadow:
+      0 6px 0 #8b2e22,
+      0 10px 18px rgba(0,0,0,0.45),
+      inset 0 2px 3px rgba(255,255,255,0.45);
+  }
+  .die.d8 {
+    clip-path: polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%);
+    border-radius: 0;
+    background:
+      radial-gradient(circle at 40% 30%, rgba(255,255,255,0.4) 0%, transparent 45%),
+      linear-gradient(150deg, #b8f2c8 0%, #57cc99 50%, #2d8a62 100%);
+    box-shadow: 0 6px 14px rgba(0,0,0,0.4);
+  }
+  .die.chosen {
+    outline: 3px solid #ffd56a;
+    outline-offset: 3px;
+    filter: brightness(1.08);
+  }
+  .die.dim {
+    opacity: 0.45;
+    filter: grayscale(0.4);
+  }
+  .die-label {
+    font-size: 11px;
+    color: #9a90b8;
+    letter-spacing: 1px;
+  }
+  .die-label.b { color: #6dffb0; }
+  .die-label.p { color: #ff7a7a; }
+  .total-box {
+    text-align: center;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid #3d3560;
+    border-radius: 12px;
+    padding: 14px 12px;
+    margin-top: 4px;
+  }
+  .total-label {
+    font-size: 12px;
+    color: #9a90b8;
+    letter-spacing: 3px;
+    margin-bottom: 4px;
+  }
+  .total-value {
+    font-size: 42px;
+    font-weight: 900;
+    color: #ffd56a;
+    text-shadow: 0 0 20px rgba(255,213,106,0.35);
+    line-height: 1;
+  }
+  .detail {
+    margin-top: 10px;
+    font-size: 12px;
+    color: #7a7296;
+    text-align: center;
+    font-family: Consolas, monospace;
+  }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="title">{{ title }}</div>
+  {% if subtitle %}<div class="subtitle">{{ subtitle }}</div>{% endif %}
+  <div class="dice-row">
+    {% for d in dice %}
+    <div class="die-wrap">
+      <div class="die {{ d.cls }}{% if d.chosen %} chosen{% else %} dim{% endif %}">{{ d.display }}</div>
+      <div class="die-label{% if d.tag == 'b' %} b{% elif d.tag == 'p' %} p{% endif %}">
+        {{ d.label }}{% if d.tag == 'b' %} B{% elif d.tag == 'p' %} P{% endif %}{% if d.chosen and d.sides == 10 and d.label != '个位' %} *{% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  <div class="total-box">
+    <div class="total-label">RESULT</div>
+    <div class="total-value">{{ total }}</div>
+  </div>
+  {% if text %}<div class="detail">{{ text }}</div>{% endif %}
+</div>
+</body>
+</html>

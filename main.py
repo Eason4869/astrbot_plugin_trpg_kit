@@ -20,44 +20,40 @@ from character.guided import is_active, start_cc
 from character.models import ATTR_KEYS, CharacterCard, apply_attrs
 from character.store import CharacterStore
 from dice.coc_rules import check_vs_skill, san_check
-from dice.engine import DiceError, format_d100, parse_and_roll, parse_bonus_penalty_suffix, roll_d100
+from dice.engine import DiceError, D100Roll, ExprResult, format_d100, parse_and_roll, parse_bonus_penalty_suffix, roll_d100
 from npc.store import NpcStore
+from render.dice_card import render_dice_html
 
 HELP_TEXT = """【TRPG助手 · 帮助】
-指令均带 trpg 前缀，避免与其它插件冲突。
+指令带 trpg 前缀，避免与其它插件冲突。
 
-/trpg掷骰 [表达式] [b|p]…
-  掷骰，默认 1d100（两 d10）；b 奖励骰、p 惩罚骰
-  例：/trpg掷骰 1d100 b
+/trpgroll [表达式] [b|p]…
+  掷骰，默认 1d100；b 奖励 / p 惩罚
+  例：/trpgroll 1d100 b
 
-/trpg检定 技能值|技能名 [n|h|e|c] [b|p]…
-  技能检定；难度 n常规 h/e困难 c大成功
-  例：/trpg检定 50 h
+/trpgcheck 技能值|技能名 [n|h|e|c] [b|p]…
+  技能检定；n常规 h/e困难 c大成功
+  例：/trpgcheck 50 h
 
-/trpg理智 [SAN] [成功损失上限]
+/trpgsan [SAN] [成功损失上限]
   SAN 检定并写回当前角色
-  例：/trpg理智 40 8
 
 /trpg设置 字段=值 …
   例：/trpg设置 STR=70 侦查=65 SAN=55
 
-/trpg快车 [职业]     快速车卡
-/trpg车卡            引导车卡（取消：/trpg车卡 取消）
-/trpg角色 [角色名]    查看角色卡（图）
-/trpg列表            我的角色列表
-/trpg切换 角色名      切换当前角色
-/trpg删除 角色名 !    确认删除
+/trpgquick [职业]   快速车卡
+/trpgcc             引导车卡（取消：/trpgcc cancel）
+/trpgpc [角色名]    角色卡（图）
+/trpgpcs            角色列表
+/trpguse 角色名     切换当前角色
+/trpgdel 角色名 !   确认删除
 
-/trpg战斗 [名 分数 …] 先攻 / 无参查看 / 清空
-  例：/trpg战斗 张三 1d100 李四 80
-  清空：/trpg战斗 清空
+/trpginit [名 分数 …] 战斗轮 / 无参查看 / clear
+  例：/trpginit 张三 1d100 李四 80
 
-/trpg存npc 名        当前角色 → NPC
-/trpgnpc列表
-/trpg读npc 名
-/trpg删npc 名
+/trpgnpcc 名 | /trpgnpcs | /trpgnpr 名 | /trpgnpcd 名
 
-/trpg帮助            本说明"""
+/trpg帮助            本说明（纯文本）"""
 
 
 def _plugin_data_dir(context: Context) -> Path:
@@ -101,25 +97,108 @@ class TrpgKit(Star):
     def _resolve_card(self, event: AstrMessageEvent, name: str | None = None) -> CharacterCard | None:
         return self.characters.resolve(self._uid(event), name)
 
-    @filter.command("trpg掷骰")
+    async def _try_dice_image(self, event: AstrMessageEvent, payload: dict[str, Any]) -> bool:
+        """Render dice card image. Returns True if image_result was yielded."""
+        try:
+            html = render_dice_html(payload)
+            url = await self.html_render("{{ html|safe }}", {"html": html})
+            yield event.image_result(url)
+            return True
+        except Exception as e:
+            logger.warning(f"dice image render failed: {e}")
+            return False
+
+    # --- dice / check ---
+
+    @filter.command("trpgroll")
     async def cmd_roll(self, event: AstrMessageEvent, *args: str):
-        """TRPG助手掷骰"""
+        """TRPG助手掷骰：图 + 文"""
         try:
             rest, bonus, penalty = parse_bonus_penalty_suffix(list(args))
             expr = rest[0] if rest else "1d100"
             result = parse_and_roll(expr, bonus=bonus, penalty=penalty, rng=self._rng)
             extra = f" 奖励×{bonus} 惩罚×{penalty}" if bonus or penalty else ""
-            yield event.plain_result(f"掷骰 {expr}{extra}\n{result.text}")
+            text = f"掷骰 {expr}{extra}\n{result.text}"
+            payload = self._dice_payload(expr, result, bonus, penalty)
+            sent_img = False
+            try:
+                html = render_dice_html(payload)
+                url = await self.html_render("{{ html|safe }}", {"html": html})
+                yield event.image_result(url)
+                sent_img = True
+            except Exception as e:
+                logger.warning(f"dice image failed, text only: {e}")
+            # always send text summary (image + text)
+            yield event.plain_result(text)
+            _ = sent_img
         except DiceError as e:
-            yield event.plain_result(f"表达式错误：{e}\n例：/trpg掷骰 1d100 b 或 /trpg掷骰 2d6+3")
+            yield event.plain_result(f"表达式错误：{e}\n例：/trpgroll 1d100 b 或 /trpgroll 2d6+3")
 
-    @filter.command("trpg检定")
+    def _dice_payload(
+        self, expr: str, result: ExprResult, bonus: int, penalty: int
+    ) -> dict[str, Any]:
+        dice: list[dict[str, Any]] = []
+        if result.is_d100 and result.d100 is not None:
+            d100: D100Roll = result.d100
+            for i, t in enumerate(d100.tens_pool):
+                tag = d100.marked[i] if i < len(d100.marked) else ""
+                chosen = t == d100.chosen_tens
+                role = "十位"
+                if tag == "b":
+                    role = "奖励"
+                elif tag == "p":
+                    role = "惩罚"
+                dice.append(
+                    {
+                        "sides": 10,
+                        "value": t,
+                        "display": str(t),
+                        "label": role,
+                        "chosen": chosen,
+                        "tag": tag,
+                    }
+                )
+            dice.append(
+                {
+                    "sides": 10,
+                    "value": d100.ones,
+                    "display": str(d100.ones),
+                    "label": "个位",
+                    "chosen": True,
+                    "tag": "",
+                }
+            )
+            total = d100.value
+        else:
+            for term in result.terms:
+                for v in term.rolls:
+                    dice.append(
+                        {
+                            "sides": term.sides,
+                            "value": v,
+                            "display": str(v),
+                            "label": f"{term.n}d{term.sides}",
+                            "chosen": True,
+                            "tag": "",
+                        }
+                    )
+            total = result.total
+        return {
+            "title": f"掷骰 {expr}",
+            "dice": dice[:12],
+            "total": total,
+            "text": result.text,
+            "bonus": bonus,
+            "penalty": penalty,
+        }
+
+    @filter.command("trpgcheck")
     async def cmd_check(self, event: AstrMessageEvent, *args: str):
         """TRPG助手技能检定"""
         try:
             rest, bonus, penalty = parse_bonus_penalty_suffix(list(args))
             if not rest:
-                yield event.plain_result("用法：/trpg检定 侦查  或  /trpg检定 50 h b")
+                yield event.plain_result("用法：/trpgcheck 侦查  或  /trpgcheck 50 h b")
                 return
             token = rest[0]
             difficulty = ""
@@ -132,7 +211,7 @@ class TrpgKit(Star):
             else:
                 card = self._resolve_card(event)
                 if not card:
-                    yield event.plain_result(f"未找到角色技能「{token}」，请先 /trpg快车 或 /trpg设置 {token}=值")
+                    yield event.plain_result(f"未找到角色技能「{token}」，请先 /trpgquick 或 /trpg设置 {token}=值")
                     return
                 if token not in card.skills:
                     if token.upper() in ATTR_KEYS:
@@ -144,13 +223,30 @@ class TrpgKit(Star):
                     skill = int(card.skills[token])
             d100 = roll_d100(self._rng, bonus=bonus, penalty=penalty)
             result = check_vs_skill(d100, skill, difficulty=difficulty or "n")
+            expr = "1d100"
+            fake = ExprResult(
+                terms=[],
+                total=d100.value,
+                is_d100=True,
+                d100=d100,
+                text=format_d100(d100),
+            )
+            payload = self._dice_payload(expr, fake, bonus, penalty)
+            payload["title"] = f"检定[{label}]={skill}"
+            payload["subtitle"] = result.level.value
+            try:
+                html = render_dice_html(payload)
+                url = await self.html_render("{{ html|safe }}", {"html": html})
+                yield event.image_result(url)
+            except Exception as e:
+                logger.warning(f"check dice image failed: {e}")
             yield event.plain_result(
                 f"检定[{label}]={skill} {format_d100(d100)}\n{result.level.value}"
             )
         except DiceError as e:
             yield event.plain_result(f"检定失败：{e}")
 
-    @filter.command("trpg理智")
+    @filter.command("trpgsan")
     async def cmd_sanity(self, event: AstrMessageEvent, *args: str):
         """TRPG助手 SAN 检定"""
         san = None
@@ -162,10 +258,26 @@ class TrpgKit(Star):
         card = self._resolve_card(event)
         if san is None:
             if not card:
-                yield event.plain_result("无当前角色。用法：/trpg理智 50 或先 /trpg快车 建卡")
+                yield event.plain_result("无当前角色。用法：/trpgsan 50 或先 /trpgquick 建卡")
                 return
             san = int(card.derived.get("SAN", card.attrs.get("POW", 0)))
         res = san_check(san, rng=self._rng, success_loss_cap=cap)
+        # rebuild d100 visual from roll value
+        if res.roll == 100:
+            tens, ones = 0, 0
+        else:
+            tens, ones = divmod(res.roll, 10)
+        d100 = D100Roll(tens_pool=[tens], ones=ones, chosen_tens=tens, marked=[""])
+        fake = ExprResult(terms=[], total=res.roll, is_d100=True, d100=d100, text=format_d100(d100))
+        payload = self._dice_payload("1d100", fake, 0, 0)
+        payload["title"] = "SAN 检定"
+        payload["subtitle"] = f"{'成功' if res.success else '失败'} · 损失{res.loss} · 剩{res.new_san}"
+        try:
+            html = render_dice_html(payload)
+            url = await self.html_render("{{ html|safe }}", {"html": html})
+            yield event.image_result(url)
+        except Exception as e:
+            logger.warning(f"san dice image failed: {e}")
         msg = (
             f"SAN检定 当前{res.san} → 掷骰 {res.roll}："
             f"{'成功' if res.success else '失败'}，损失 {res.loss}，"
@@ -222,7 +334,7 @@ class TrpgKit(Star):
             f"已更新角色「{card.name}」：属性{attrs or '无'} 派生{derived_over or '无'} 技能{skills or '无'}"
         )
 
-    @filter.command("trpg快车")
+    @filter.command("trpgquick")
     async def cmd_quick(self, event: AstrMessageEvent, *args: str):
         """TRPG助手快速车卡"""
         name = f"P{self._uid(event)[-4:]}"
@@ -239,19 +351,19 @@ class TrpgKit(Star):
         yield event.plain_result(
             f"快速车卡完成：{card.name}（{job}）\n{attrs_line}\n"
             f"HP={card.derived['HP']} MP={card.derived['MP']} SAN={card.derived['SAN']} MOV={card.derived['MOV']}\n"
-            f"已设为当前角色。查看：/trpg角色"
+            f"已设为当前角色。查看：/trpgpc"
         )
 
-    @filter.command("trpg车卡")
+    @filter.command("trpgcc")
     async def cmd_cc(self, event: AstrMessageEvent, *args: str):
         """TRPG助手引导车卡"""
         uid = self._uid(event)
-        if args and args[0] in ("取消", "cancel"):
+        if args and args[0].lower() in ("cancel", "取消"):
             self._cc_sessions.pop(uid, None)
             yield event.plain_result("已取消车卡")
             return
         session = start_cc()
-        session.message = session.message.replace("/cc cancel", "/trpg车卡 取消")
+        session.message = session.message.replace("/trpg车卡 取消", "/trpgcc cancel")
         self._cc_sessions[uid] = session
         yield event.plain_result(session.message)
 
@@ -275,15 +387,15 @@ class TrpgKit(Star):
             yield event.plain_result(session.message)
         except Exception:
             logger.exception("guided cc failed")
-            yield event.plain_result("引导车卡出错，已结束。可 /trpg车卡 重试")
+            yield event.plain_result("引导车卡出错，已结束。可 /trpgcc 重试")
 
-    @filter.command("trpg角色")
+    @filter.command("trpgpc")
     async def cmd_card(self, event: AstrMessageEvent, *args: str):
         """TRPG助手角色卡"""
         name = args[0] if args else None
         card = self._resolve_card(event, name)
         if not card:
-            yield event.plain_result("无角色。/trpg快车 快速车卡 或 /trpg列表 查看列表")
+            yield event.plain_result("无角色。/trpgquick 快速车卡 或 /trpgpcs 查看列表")
             return
         self.characters.set_current(self._uid(event), card.name)
         san = int(card.derived.get("SAN", card.attrs.get("POW", 0)))
@@ -307,13 +419,13 @@ class TrpgKit(Star):
             f"技能：{skills_line or '（无）'}"
         )
 
-    @filter.command("trpg列表")
+    @filter.command("trpgpcs")
     async def cmd_list(self, event: AstrMessageEvent):
         """TRPG助手角色列表"""
         names = self.characters.list_names(self._uid(event))
         cur = self.characters.get_current(self._uid(event))
         if not names:
-            yield event.plain_result("你还没有角色，/trpg快车 创建")
+            yield event.plain_result("你还没有角色，/trpgquick 创建")
             return
         lines = [f"你的角色（当前：{cur or '无'}）："]
         for n in names:
@@ -321,7 +433,7 @@ class TrpgKit(Star):
             lines.append(f"- {n}{mark}")
         yield event.plain_result("\n".join(lines))
 
-    @filter.command("trpg切换")
+    @filter.command("trpguse")
     async def cmd_use(self, event: AstrMessageEvent, name: str):
         """TRPG助手切换当前角色"""
         if not self.characters.get(self._uid(event), name):
@@ -330,16 +442,16 @@ class TrpgKit(Star):
         self.characters.set_current(self._uid(event), name)
         yield event.plain_result(f"当前角色 → {name}")
 
-    @filter.command("trpg删除")
+    @filter.command("trpgdel")
     async def cmd_del(self, event: AstrMessageEvent, *args: str):
         """TRPG助手删除角色"""
         if not args:
-            yield event.plain_result("用法：/trpg删除 角色名  或 /trpg删除 角色名 ! 确认删除")
+            yield event.plain_result("用法：/trpgdel 角色名  或 /trpgdel 角色名 ! 确认删除")
             return
         name = args[0]
         confirm = len(args) > 1 and args[1] in ("!", "！")
         if not confirm:
-            yield event.plain_result(f"确认删除「{name}」？再发 /trpg删除 {name} !")
+            yield event.plain_result(f"确认删除「{name}」？再发 /trpgdel {name} !")
             return
         ok = self.characters.delete(self._uid(event), name)
         yield event.plain_result(f"已删除「{name}」" if ok else f"没有角色「{name}」")
@@ -362,10 +474,10 @@ class TrpgKit(Star):
             json.dumps(rows, ensure_ascii=False), encoding="utf-8"
         )
 
-    @filter.command("trpg战斗")
+    @filter.command("trpginit")
     async def cmd_init(self, event: AstrMessageEvent, *args: str):
         """TRPG助手战斗轮"""
-        if args and args[0] in ("清空", "clear"):
+        if args and args[0].lower() in ("clear", "清空"):
             self._save_battle([])
             yield event.plain_result("战斗轮已清空")
             return
@@ -392,7 +504,7 @@ class TrpgKit(Star):
             pairs.append((name, score))
             i += 2
         if not pairs:
-            yield event.plain_result("用法：/trpg战斗 张三 1d100 李四 80 ；无参查看；/trpg战斗 清空")
+            yield event.plain_result("用法：/trpginit 张三 1d100 李四 80 ；无参查看；/trpginit clear")
             return
         existing = [(str(n), int(s)) for n, s in self._load_battle()]
         existing.extend(pairs)
@@ -400,7 +512,7 @@ class TrpgKit(Star):
         entries = sort_initiative(existing)
         yield event.plain_result(format_initiative(entries))
 
-    @filter.command("trpg存npc")
+    @filter.command("trpgnpcc")
     async def cmd_npc_save(self, event: AstrMessageEvent, name: str):
         """TRPG助手保存 NPC"""
         card = self._resolve_card(event)
@@ -413,16 +525,16 @@ class TrpgKit(Star):
         self.npcs.save(npc)
         yield event.plain_result(f"已保存 NPC 模板「{name}」")
 
-    @filter.command("trpgnpc列表")
+    @filter.command("trpgnpcs")
     async def cmd_npc_list(self, event: AstrMessageEvent):
         """TRPG助手 NPC 列表"""
         names = self.npcs.list_names()
         if not names:
-            yield event.plain_result("NPC 库为空。/trpg存npc 名字 从当前角色保存")
+            yield event.plain_result("NPC 库为空。/trpgnpcc 名字 从当前角色保存")
             return
         yield event.plain_result("NPC：" + "、".join(names))
 
-    @filter.command("trpg读npc")
+    @filter.command("trpgnpr")
     async def cmd_npc_read(self, event: AstrMessageEvent, name: str):
         """TRPG助手读取 NPC"""
         npc = self.npcs.get(name)
@@ -445,7 +557,7 @@ class TrpgKit(Star):
             f"HP={npc.derived.get('HP')} MP={npc.derived.get('MP')} SAN={npc.derived.get('SAN')}"
         )
 
-    @filter.command("trpg删npc")
+    @filter.command("trpgnpcd")
     async def cmd_npc_del(self, event: AstrMessageEvent, name: str):
         """TRPG助手删除 NPC"""
         ok = self.npcs.delete(name)
@@ -453,7 +565,9 @@ class TrpgKit(Star):
 
     @filter.command("trpg帮助")
     async def cmd_help(self, event: AstrMessageEvent):
-        """TRPG助手帮助 — 不占用系统 /help"""
+        """TRPG助手帮助 — 强制纯文本，不做 t2i"""
+        # Force plain text only: never call html_render / text_to_image / image_result
+        # Long-message auto t2i may still apply at platform layer; keep message compact.
         yield event.plain_result(HELP_TEXT)
 
     async def terminate(self):

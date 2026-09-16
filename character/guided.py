@@ -21,7 +21,7 @@ class CcSession:
 
 
 def start_cc() -> CcSession:
-    return CcSession(step=1, message="【引导车卡 1/3】请回复角色名。\n（/trpg车卡 取消）")
+    return CcSession(step=1, message="【引导车卡 1/3】请回复角色名。\n（/trpgcc cancel 取消）")
 
 
 def advance(session: CcSession, text: str, store: CharacterStore, owner: str) -> CcSession:
@@ -84,11 +84,11 @@ def advance(session: CcSession, text: str, store: CharacterStore, owner: str) ->
             store.save(card)
             store.set_current(owner, card.name)
             session.step = 4
-            session.message = f"已保存并设为当前角色：{card.name}。查看 /trpg角色"
+            session.message = f"已保存并设为当前角色：{card.name}。查看 /trpgpc"
             return session
         session.message = "请回复 `ok` 保存或 `r` 重随。"
         return session
-    session.message = "车卡已结束。/trpg车卡 可重新开始。"
+    session.message = "车卡已结束。/trpgcc 可重新开始。"
     return session
 
 
