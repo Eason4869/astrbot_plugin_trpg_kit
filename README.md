@@ -1,18 +1,16 @@
 # TRPG助手
 
-<p align="center">
-  <img src="logo.png" alt="TRPG助手 Logo" width="128" />
-</p>
+<div align="center">
 
-<p align="center">
-  <img src="docs/assets/visit-counter.svg" alt="Visit Counter" />
-</p>
+![:name](https://count.getloli.com/@astrbot_plugin_trpg_kit?name=astrbot_plugin_trpg_kit&theme=minecraft&padding=6&offset=0&align=top&scale=1&pixelated=1&darkmode=auto)
 
-<p align="center">
-  <a href="https://github.com/Eason4869/astrbot_plugin_trpg_kit"><img src="https://img.shields.io/badge/AstrBot-%3E%3D4.16-blue" alt="AstrBot"/></a>
-  <img src="https://img.shields.io/badge/version-0.1.0-green" alt="version"/>
-  <img src="https://img.shields.io/badge/rule-CoC%207e-orange" alt="CoC 7e"/>
-</p>
+<img src="logo.png" alt="TRPG助手 Logo" width="128" />
+
+<a href="https://github.com/Eason4869/astrbot_plugin_trpg_kit"><img src="https://img.shields.io/badge/AstrBot-%3E%3D4.16-blue" alt="AstrBot"/></a>
+<img src="https://img.shields.io/badge/version-0.1.0-green" alt="version"/>
+<img src="https://img.shields.io/badge/rule-CoC%207e-orange" alt="CoC 7e"/>
+
+</div>
 
 [English](#english) · 简体中文
 
