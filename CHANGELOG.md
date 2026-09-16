@@ -13,7 +13,7 @@
 - 完整 CoC7 职业表与技能点分配
 - 战斗轮按会话隔离
 - 引导车卡会话持久化（重启可恢复）
-- 奖励 / 惩罚骰在 `/trpg检定` 输出中的更清晰分列展示
+- 奖励 / 惩罚骰在 `/trpgcheck` 输出中的更清晰分列展示
 
 ---
 
@@ -27,37 +27,39 @@
 
 - 中文显示名 **TRPG助手**（`metadata.yaml` `display_name`）
 - 插件 Logo：`logo.png`（256×256）
-- README：我的世界风格浏览计数器、TODO 路线（含 **DND 5e**）
-- **中文指令 + `trpg` 前缀**，避免与其它插件 / 系统指令冲突（如 `/help`）
+- README：count.getloli.com Minecraft 浏览计数器、TODO 路线（含 **DND 5e**）
+- **指令前缀 `trpg`**：除 `/trpg帮助`、`/trpg设置` 外均为英文名（`trpgroll` / `trpgcheck` / …）
+- `/trpg帮助` **强制纯文本**（不做 t2i）
+- `/trpgroll` / `/trpgcheck` / `/trpgsan` 输出 **拟真骰子图 + 文字结果**
 - 插件根目录自动加入 `sys.path`，修复 AstrBot 加载 `ModuleNotFoundError: battle`
 
 #### 掷骰
 
-- `/trpg掷骰`：支持 `NdM`、`NdM±K`、多段加减；缺省 `1d100`
+- `/trpgroll`：支持 `NdM`、`NdM±K`、多段加减；缺省 `1d100`
 - **d100 内核为两个 d10**（十位 + 个位），为奖励 / 惩罚骰设计
 - 奖励骰 `b`（额外十位取最小）、惩罚骰 `p`（额外十位取最大），可连写
 - `00+0` 记为 100；展示格式含选用十位标记
 
 #### CoC7 检定
 
-- `/trpg检定`：技能值或技能名 / 属性名检定
+- `/trpgcheck`：技能值或技能名 / 属性名检定
 - 成功等级：大成功（≤⅕）、困难成功（≤½）、成功、失败、大失败（100 或低技能 96+）
 - 难度门槛 `n` / `h` / `e` / `c`；可与奖惩骰组合
-- `/trpg理智`：SAN 检定；成功 `1d4`（可设上限）、失败 `1d6+1`；与当前角色 SAN 一致时自动写回
+- `/trpgsan`：SAN 检定；成功 `1d4`（可设上限）、失败 `1d6+1`；与当前角色 SAN 一致时自动写回
 
 #### 角色
 
 - 多命名角色 JSON 存档 + 每用户当前角色指针
-- `/trpg快车` 快速车卡：属性法 `3d6x5`（默认）或 `2d6+6+30`；派生 HP/MP/SAN/MOV/DB/Build
-- `/trpg车卡` 三步引导车卡：名字 → 职业与属性法 → 预览 / `r` 重随 / `ok` 保存
+- `/trpgquick` 快速车卡：属性法 `3d6x5`（默认）或 `2d6+6+30`；派生 HP/MP/SAN/MOV/DB/Build
+- `/trpgcc` 三步引导车卡：名字 → 职业与属性法 → 预览 / `r` 重随 / `ok` 保存
 - `/trpg设置` 写入属性 / 技能 / 派生（SAN、HP、MP、luck）；同次命令中派生值不被属性重算覆盖
-- `/trpg角色` `/trpg列表` `/trpg切换` `/trpg删除`（删除需 `!` 确认）
+- `/trpgpc` `/trpgpcs` `/trpguse` `/trpgdel`（删除需 `!` 确认）
 - 角色图片卡（Jinja2 HTML + `html_render`），失败降级纯文本
 
 #### NPC 与战斗
 
-- `/trpg存npc` `/trpgnpc列表` `/trpg读npc` `/trpg删npc`：全局 NPC 模板库；读取优先图卡
-- `/trpg战斗`：战斗轮追加、显示、`清空`；同分按输入序
+- `/trpgnpcc` `/trpgnpcs` `/trpgnpr` `/trpgnpcd`：全局 NPC 模板库；读取优先图卡
+- `/trpginit`：战斗轮追加、显示、`clear`；同分按输入序
 
 #### 工程
 
