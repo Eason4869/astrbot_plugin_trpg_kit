@@ -24,36 +24,86 @@ from dice.engine import DiceError, D100Roll, ExprResult, format_d100, parse_and_
 from npc.store import NpcStore
 from render.dice_card import render_dice_html
 
-HELP_TEXT = """【TRPG助手 · 帮助】
-指令带 trpg 前缀，避免与其它插件冲突。
+HELP_PARTS: list[str] = [
+    """【TRPG助手】完整指令手册 (1/3)
+包名 astrbot_plugin_trpg_kit · 规则 CoC 7e
+所有指令带 trpg 前缀；/help 是系统指令，本插件用 /trpg帮助
+带角色的指令默认操作「当前角色」，先 /trpguse 切换
 
-/trpgroll [表达式] [b|p]…
-  掷骰，默认 1d100；b 奖励 / p 惩罚
-  例：/trpgroll 1d100 b
+━━ 掷骰 / 检定 ━━
 
-/trpgcheck 技能值|技能名 [n|h|e|c] [b|p]…
-  技能检定；n常规 h/e困难 c大成功
-  例：/trpgcheck 50 h
+/trpgroll [骰式] [b|p]…
+  掷骰。缺省 1d100（内部两个 d10：十位+个位）
+  b = 奖励骰（额外十位取最小）
+  p = 惩罚骰（额外十位取最大）
+  可连写：bb=2枚奖励，pp=2枚惩罚
+  支持：1d100  2d6  1d20+3  2d6+1d8-2
+  输出：拟真骰子图 + 文字结果
+  例：
+    /trpgroll
+    /trpgroll 1d100 b
+    /trpgroll 2d6+3
+    /trpgroll 1d100 pp""",
+    """【TRPG助手】完整指令手册 (2/3)
 
-/trpgsan [SAN] [成功损失上限]
-  SAN 检定并写回当前角色
+/trpgcheck 技能 或 技能值 [难度] [b|p]…
+  技能检定（d100 对照技能百分比）
+  技能：当前角色里的技能名（如 侦查），或直接写数字 50
+  属性名 STR/CON/POW/DEX/APP/SIZ/INT/EDU 也可
+  难度：n=常规(默认)  h=困难(≤半)  e=困难  c=要求大成功
+  输出：图 + 文字（含大成功/困难/成功/失败/大失败）
+  例：
+    /trpgcheck 侦查
+    /trpgcheck 50 h
+    /trpgcheck 75 c b
+    /trpgcheck STR
 
-/trpg设置 字段=值 …
-  例：/trpg设置 STR=70 侦查=65 SAN=55
+/trpgsan [当前SAN] [成功损失上限]
+  SAN 理智检定：掷 1d100 ≤ SAN 为成功
+  成功丢 1d4（可设上限），失败丢 1d6+1
+  省略 SAN 时读当前角色；结果自动写回角色
+  例：
+    /trpgsan
+    /trpgsan 40
+    /trpgsan 40 8
 
-/trpgquick [职业]   快速车卡
-/trpgcc             引导车卡（取消：/trpgcc cancel）
-/trpgpc [角色名]    角色卡（图）
-/trpgpcs            角色列表
-/trpguse 角色名     切换当前角色
-/trpgdel 角色名 !   确认删除
+/trpg设置 键=值 [键=值…]
+  写入属性 / 技能 / 派生值
+  八维属性：STR CON POW DEX APP SIZ INT EDU
+  派生：SAN HP MP luck
+  其它键一律视为技能名
+  例：
+    /trpg设置 STR=70 CON=55 侦查=65
+    /trpg设置 SAN=55 HP=12""",
+    """【TRPG助手】完整指令手册 (3/3)
 
-/trpginit [名 分数 …] 战斗轮 / 无参查看 / clear
+━━ 车卡 / 角色 ━━
+/trpgquick [职业]     一键随机车卡并设为当前角色
+/trpgcc               引导车卡 3 步；取消：/trpgcc cancel
+  步骤：回复角色名 → 回复职业(可带 3d6/2d6) → ok保存 或 r重随
+/trpgpc [角色名]      查看角色卡（图片，失败则文本）
+/trpgpcs              列出你的全部角色（* 为当前）
+/trpguse 角色名       切换当前角色
+/trpgdel 角色名 !     删除角色（必须带 ! 确认）
+
+━━ 战斗轮 ━━
+/trpginit                 查看当前战斗轮
+/trpginit 名 分数 …       追加并排序；分数可为 80 或 1d100
+/trpginit clear           清空
   例：/trpginit 张三 1d100 李四 80
 
-/trpgnpcc 名 | /trpgnpcs | /trpgnpr 名 | /trpgnpcd 名
+━━ NPC 模板 ━━
+/trpgnpcc 名       把当前角色存为 NPC
+/trpgnpcs          列出全部 NPC
+/trpgnpr 名        读取 NPC（图卡）
+/trpgnpcd 名       删除 NPC
 
-/trpg帮助            本说明（纯文本）"""
+━━ 其它 ━━
+/trpg帮助          本帮助（纯文本，不转图片）
+/trpgroll 说明     d100=2×d10；00+0 记为 100
+成功等级：大成功≤⅕技能；困难≤½；成功≤技能；100 或低技能96+为大失败
+数据存于插件 data/trpg_kit/，重装插件前请自行备份""",
+]
 
 
 def _plugin_data_dir(context: Context) -> Path:
@@ -554,10 +604,10 @@ class TrpgKit(Star):
 
     @filter.command("trpg帮助")
     async def cmd_help(self, event: AstrMessageEvent):
-        """TRPG助手帮助 — 强制纯文本，不做 t2i"""
-        # Force plain text only: never call html_render / text_to_image / image_result
-        # Long-message auto t2i may still apply at platform layer; keep message compact.
-        yield event.plain_result(HELP_TEXT)
+        """TRPG助手完整帮助 — 强制纯文本，强制跳过 AstrBot 内置 t2i"""
+        # use_t2i(False) marks the result so core/platform skips 文本转图像
+        for part in HELP_PARTS:
+            yield event.plain_result(part).use_t2i(False)
 
     async def terminate(self):
         pass
