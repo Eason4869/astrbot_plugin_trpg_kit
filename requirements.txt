@@ -1,0 +1,2 @@
+# Runtime deps: prefer AstrBot built-ins (jinja2/Playwright for t2i).
+# Empty on purpose so pip install -r requirements.txt is a no-op on most hosts.

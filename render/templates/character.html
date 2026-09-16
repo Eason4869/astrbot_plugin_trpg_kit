@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<style>
+  body { margin: 0; font-family: "Microsoft YaHei", "PingFang SC", sans-serif; background: #f7f3ea; }
+  .card {
+    width: 720px; margin: 24px; background: #fffdf8;
+    border: 3px double #5c4033; border-radius: 8px; padding: 28px 32px;
+    color: #2c2416; box-sizing: border-box;
+  }
+  h1 { margin: 0 0 4px; font-size: 28px; letter-spacing: 2px; }
+  .sub { color: #6b5344; font-size: 14px; margin-bottom: 16px; }
+  h2 { font-size: 15px; margin: 18px 0 8px; border-bottom: 1px solid #c4a574; padding-bottom: 4px; }
+  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .stat { background: #f3e6d0; border-radius: 4px; padding: 8px; text-align: center; }
+  .stat b { display: block; font-size: 12px; color: #6b5344; font-weight: 600; }
+  .stat span { font-size: 20px; font-weight: 700; }
+  .derived { display: flex; gap: 12px; flex-wrap: wrap; }
+  .pill { background: #5c4033; color: #fffdf8; border-radius: 999px; padding: 6px 14px; font-size: 14px; }
+  .skills { columns: 2; font-size: 14px; line-height: 1.7; }
+  .note { margin-top: 16px; font-size: 12px; color: #8a7360; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>{{ card.name }}</h1>
+  <div class="sub">职业：{{ card.meta.get('job','—') }} · 年龄：{{ card.meta.get('age','—') }} · SEX：{{ card.meta.get('sex','—') }}</div>
+  <h2>属性</h2>
+  <div class="grid">
+    {% for k in attrs %}
+    <div class="stat"><b>{{ k }}</b><span>{{ card.attrs.get(k, 0) }}</span></div>
+    {% endfor %}
+  </div>
+  <h2>派生</h2>
+  <div class="derived">
+    <span class="pill">HP {{ card.derived.get('HP') }}</span>
+    <span class="pill">MP {{ card.derived.get('MP') }}</span>
+    <span class="pill">SAN {{ san_now }}</span>
+    <span class="pill">MOV {{ card.derived.get('MOV') }}</span>
+    <span class="pill">DB {{ card.derived.get('DB') }}</span>
+    <span class="pill">Build {{ card.derived.get('build') }}</span>
+  </div>
+  <h2>技能</h2>
+  <div class="skills">
+    {% for k, v in card.skills.items() %}
+    <div>{{ k }} — {{ v }}</div>
+    {% endfor %}
+  </div>
+  {% if card.meta.get('notes') %}
+  <div class="note">{{ card.meta.get('notes') }}</div>
+  {% endif %}
+  <div class="note">更新：{{ card.updated_at }} · astrbot_plugin_trpg_kit</div>
+</div>
+</body>
+</html>

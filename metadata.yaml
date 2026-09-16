@@ -1,0 +1,8 @@
+name: astrbot_plugin_trpg_kit
+display_name: CoC TRPG KP 工具
+author: coc-dev
+desc: CoC 跑团 KP 工具：掷骰、车卡、SAN 检定、战斗轮、NPC 模板。指令短而清晰。
+short_desc: CoC 车卡 / 掷骰 / SAN / 战斗轮 KP 工具
+version: 0.1.0
+astrbot_version: ">=4.16,<5"
+repo: ""
