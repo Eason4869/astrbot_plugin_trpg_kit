@@ -1,14 +1,20 @@
 ---
 feature: trpg-kit
-status: designed
+status: delivered
 updated: 2026-07-12
 branch: feat/trpg-kit
-commits: 
+commits: 17de5dc..f4a7dd6
 ---
 
 # CoC TRPG KP 工具插件（astrbot_plugin_trpg_kit）
 
 ## Report
+
+**What was built** — AstrBot ≥4.x 插件 `astrbot_plugin_trpg_kit`：d100 内核为 2×d10（支持 b/p 奖惩骰）、CoC7 成功等级与 SAN 检定、每用户多命名角色 JSON 存档与当前指针、快速车卡与三步引导车卡、战斗轮排序、NPC 模板库、角色/NPC 图片卡（`html_render`，失败降级文本）。指令集刻意精简：`/r /ra /sc /set /cq /cc /pc /pcs /use /del /init /npcc /npcs /npr /npcd /help`。
+
+**Verification** — `python -m pytest tests -q` → **27 passed**；`main.py` AST 语法检查通过。审查（general-1）三项关键修复后由 general-2 复审：引导 `/cc`、`/set` 派生覆盖、`/npr` 图卡均 RESOLVED。
+
+**Journey log** — (1) 参考仓 WhiteEurya/TRPGdice 命令过复杂，产品向「短、少、单一语义」收敛。(2) d100 用 2×d10 以便奖惩替换十位；00+0→100。(3) `/set` 须先 `apply_attrs` 再写 SAN/HP/MP，否则派生被重算冲掉。(4) 引导车卡做成纯状态机 `character/guided.py`，便于无 AstrBot 单测。(5) 本机无 `gh` CLI，GitHub 建仓/push 走 API + `http.proxy=` 绕过本机代理。
 
 ## [S1] Problem
 
@@ -175,12 +181,12 @@ AstroBot 插件 `data` 根下建 `trpg_kit/`：`characters.json`、`current.json
 
 ## Tasks
 
-- [ ] T1: 掷骰引擎 d100(2×d10)+奖惩骰与表达式解析 — acceptance: `pytest tests/test_dice_engine.py` 全绿，覆盖 bb/pp/00/100 (covers: S2 掷骰)
-- [ ] T2: CoC7 成功等级与 SAN 规则纯函数 — acceptance: `pytest tests/test_coc_rules.py` 全绿 (covers: S2 成功等级/SAN; depends: T1)
-- [ ] T3: 角色模型、派生值、JSON 多角色存取与当前指针 — acceptance: `pytest tests/test_character_store.py` 全绿 (covers: S2 角色)
-- [ ] T4: 快速车卡生成器（属性方式可切换） — acceptance: 单测生成属性合法且派生一致 (covers: S2 车卡; depends: T3)
-- [ ] T5: NPC 库与战斗轮排序 core — acceptance: pytest 覆盖增删列与排序 (covers: S2 NPC/战斗)
-- [ ] T6: main.py 注册全部指令并接 core；文本掷骰输出 — acceptance: 模块可 import，指令 handler 齐全；人工对照指令表抽查逻辑调用 (covers: S2 指令; depends: T1–T5)
-- [ ] T7: 角色图片卡 HTML 模板 + html_render 接入与文本降级 — acceptance: 模板存在且 render 函数单测（Jinja 预渲染）通过 (covers: S2 图片卡; depends: T3)
-- [ ] T8: 引导车卡会话态（`/cc` 少步骤 + cancel） — acceptance: 状态机单测步骤转移 (covers: S2 引导车卡; depends: T4)
-- [ ] T9: README、requirements、ruff 整洁；全量 pytest — acceptance: `python -m pytest` 全绿 (covers: S2; depends: T6–T8)
+- [x] T1: 掷骰引擎 d100(2×d10)+奖惩骰与表达式解析 — acceptance: `pytest tests/test_dice_engine.py` 全绿，覆盖 bb/pp/00/100 (covers: S2 掷骰)
+- [x] T2: CoC7 成功等级与 SAN 规则纯函数 — acceptance: `pytest tests/test_coc_rules.py` 全绿 (covers: S2 成功等级/SAN; depends: T1)
+- [x] T3: 角色模型、派生值、JSON 多角色存取与当前指针 — acceptance: `pytest tests/test_character_store.py` 全绿 (covers: S2 角色)
+- [x] T4: 快速车卡生成器（属性方式可切换） — acceptance: 单测生成属性合法且派生一致 (covers: S2 车卡; depends: T3)
+- [x] T5: NPC 库与战斗轮排序 core — acceptance: pytest 覆盖增删列与排序 (covers: S2 NPC/战斗)
+- [x] T6: main.py 注册全部指令并接 core；文本掷骰输出 — acceptance: 模块可 import，指令 handler 齐全；人工对照指令表抽查逻辑调用 (covers: S2 指令; depends: T1–T5)
+- [x] T7: 角色图片卡 HTML 模板 + html_render 接入与文本降级 — acceptance: 模板存在且 render 函数单测（Jinja 预渲染）通过 (covers: S2 图片卡; depends: T3)
+- [x] T8: 引导车卡会话态（`/cc` 少步骤 + cancel） — acceptance: 状态机单测步骤转移 (covers: S2 引导车卡; depends: T4)
+- [x] T9: README、requirements、ruff 整洁；全量 pytest — acceptance: `python -m pytest` 全绿 (covers: S2; depends: T6–T8)
