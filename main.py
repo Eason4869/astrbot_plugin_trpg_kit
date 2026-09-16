@@ -10,19 +10,12 @@ from astrbot.api.star import Context, Star
 
 from battle.initiative import format_initiative, sort_initiative
 from character.creator import quick_create
-from character.models import ATTR_KEYS, CharacterCard, apply_attrs, compute_derived
+from character.guided import is_active, start_cc
+from character.models import ATTR_KEYS, CharacterCard, apply_attrs
 from character.store import CharacterStore
-from dice.coc_rules import check_vs_skill, coc7_level, san_check
+from dice.coc_rules import check_vs_skill, san_check
 from dice.engine import DiceError, format_d100, parse_and_roll, parse_bonus_penalty_suffix, roll_d100
 from npc.store import NpcStore
-
-CHAR_TMPL = """{% raw %}角色卡 · {{ card.name }}
-职业：{{ card.meta.get('job','') }}  年龄：{{ card.meta.get('age','') }}
-属性：{% for k in attrs %}{{ k }}={{ card.attrs.get(k,0) }} {% endfor %}
-派生：HP={{ card.derived.get('HP') }} MP={{ card.derived.get('MP') }} SAN={{ san_now }} MOV={{ card.derived.get('MOV') }} DB={{ card.derived.get('DB') }}
-技能：{% for k,v in card.skills.items() %}{{ k }}={{ v }}{% if not loop.last %}、{% endif %}{% endfor %}
-{% if card.meta.get('notes') %}备注：{{ card.meta.get('notes') }}
-{% endif %}更新：{{ card.updated_at }}{% endraw %}"""
 
 HELP_TEXT = """CoC TRPG KP 工具
 /r [表达式] [b|p]… — 掷骰（默认 1d100，两 d10）
@@ -66,7 +59,7 @@ class TrpgKit(Star):
         self.characters = CharacterStore(self.data_dir)
         self.npcs = NpcStore(self.data_dir)
         self.battle_path = self.data_dir / "battle.json"
-        self._cc_sessions: dict[str, dict[str, Any]] = {}
+        self._cc_sessions: dict[str, Any] = {}
         self._attr_method = "3d6x5"
         self._rng = random.Random()
 
@@ -177,6 +170,7 @@ class TrpgKit(Star):
             self.characters.set_current(self._uid(event), card.name)
         attrs: dict[str, int] = {}
         skills: dict[str, int] = {}
+        derived_over: dict[str, int] = {}
         for a in args:
             if "=" not in a:
                 yield event.plain_result(f"忽略无效项：{a}")
@@ -191,17 +185,21 @@ class TrpgKit(Star):
                 attrs[k.upper()] = val
             elif k in ("SAN", "HP", "MP", "luck"):
                 if k == "SAN":
-                    card.derived["SAN"] = val
+                    derived_over["SAN"] = val
                 else:
-                    card.derived[k] = val
+                    derived_over[k] = val
             else:
                 skills[k] = val
         if attrs:
             apply_attrs(card, attrs, recompute=True)
-            # preserve manual SAN/HP/MP if set in same command — recompute only attrs
+        # apply manual derived after recompute so SAN/HP/MP stick
+        for k, v in derived_over.items():
+            card.derived[k] = v
         card.skills.update(skills)
         self.characters.save(card)
-        yield event.plain_result(f"已更新角色「{card.name}」：属性{attrs or '无'} 技能{skills or '无'}")
+        yield event.plain_result(
+            f"已更新角色「{card.name}」：属性{attrs or '无'} 派生{derived_over or '无'} 技能{skills or '无'}"
+        )
 
     # --- character ---
 
@@ -228,16 +226,39 @@ class TrpgKit(Star):
 
     @filter.command("cc")
     async def cmd_cc(self, event: AstrMessageEvent, *args: str):
-        """引导车卡"""
+        """引导车卡入口"""
         uid = self._uid(event)
         if args and args[0].lower() == "cancel":
             self._cc_sessions.pop(uid, None)
             yield event.plain_result("已取消车卡")
             return
-        self._cc_sessions[uid] = {"step": 1}
-        yield event.plain_result(
-            "【引导车卡 1/3】请回复角色名。\n（/cc cancel 取消）"
-        )
+        from character.guided import start_cc as _start
+
+        session = _start()
+        self._cc_sessions[uid] = session
+        yield event.plain_result(session.message)
+
+    @filter.event_message_type(filter.EventMessageType.ALL)
+    async def on_cc_text(self, event: AstrMessageEvent):
+        """引导车卡：非指令纯文本推进会话"""
+        uid = self._uid(event)
+        session = self._cc_sessions.get(uid)
+        if not is_active(session):
+            return
+        text = (event.message_str or "").strip()
+        if not text or text.startswith("/"):
+            return
+        from character.guided import advance
+
+        try:
+            session = advance(session, text, self.characters, uid)
+            self._cc_sessions[uid] = session
+            if session.step >= 4:
+                self._cc_sessions.pop(uid, None)
+            yield event.plain_result(session.message)
+        except Exception:
+            logger.exception("guided cc failed")
+            yield event.plain_result("引导车卡出错，已结束。可 /cc 重试")
 
     @filter.command("pc")
     async def cmd_pc(self, event: AstrMessageEvent, *args: str):

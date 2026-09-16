@@ -1,0 +1,6 @@
+{
+  "help_title": "CoC TRPG KP 工具",
+  "roll_usage": "例：/r 1d100 b / /r 2d6+3",
+  "ra_usage": "用法：/ra 侦查 或 /ra 50 h b",
+  "set_usage": "用法：/set STR=70 SAN=55 侦查=40"
+}
